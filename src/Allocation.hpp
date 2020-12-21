@@ -117,8 +117,8 @@ class RegAlloc
 	static void pushState();
 	static void popState(Branch*);
 	
-	static void storeAll();
-	static void loadAll();
+	static void storeAll(int = 0);
+	static void loadAll(int = 0);
 
 };
 

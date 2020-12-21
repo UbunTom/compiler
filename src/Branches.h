@@ -350,7 +350,7 @@ public:
 		
 		RegAlloc::storeAll();
 		CodeGen::push(new BBlock(iden->format(), true));
-		RegAlloc::loadAll();
+		RegAlloc::loadAll(1);
 		
 		return ExpressionResult(REG, 0);
 	}
