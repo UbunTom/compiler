@@ -93,7 +93,6 @@ class ExpressionResult
 		assert(loc == LITERAL);
 		int reg = RegAlloc::getScratch();
 		CodeGen::push(new TextBlock("    LDR r12, =" + str));
-		CodeGen::push(new TextBlock("    LDR r12, [r12]"));
 		
 		loc = REG;
 		value = reg;
