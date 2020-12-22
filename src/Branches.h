@@ -155,8 +155,9 @@ public:
 	ExpressionResult execute()
 	{
 		if(mode==0) return conditionalexp->execute();
-		ExpressionResult lhs = unaryexp->execute();
 		ExpressionResult rhs = assignmentexp->execute();
+		// Perform lhs execution second
+		ExpressionResult lhs = unaryexp->execute();
 
 		if (!checkResult(lhs, REG)) throw SyntaxError("Left hand size of assignment is immutable");
 		
@@ -313,6 +314,7 @@ public:
 			ret = next->executeEval(i+1);
 		}
 		
+		RegAlloc::store(i);
 		CodeGen::push(new StackPushPop({i}, false));
 		
 		return ret;
@@ -350,7 +352,6 @@ public:
 		
 		RegAlloc::storeAll();
 		CodeGen::push(new BBlock(iden->format(), true));
-		RegAlloc::loadAll(1);
 		
 		return ExpressionResult(REG, 0);
 	}

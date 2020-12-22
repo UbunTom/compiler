@@ -132,11 +132,18 @@ void RegAlloc::popState(Branch* loop)
 	}
 }
 
+void RegAlloc::store(int i){
+	if(regs[i]!=NULL){
+		regs[i]->store();
+		regs[i] = NULL;
+	}
+}
+
 void RegAlloc::storeAll(int from)
 {
 	for(int i=from; i<8; i++)
 	{
-		if(regs[i]!=NULL)regs[i]->store();
+		store(i);
 	}
 }
 
