@@ -736,8 +736,8 @@ public:
 		if (mode==0) return shiftexp->execute();
 		
 		
-		ExpressionResult lhs = shiftexp->execute();
-		ExpressionResult rhs = relationalexp->execute();
+		ExpressionResult lhs = relationalexp->execute();
+		ExpressionResult rhs = shiftexp->execute();
 		
 		lhs.toReg();
 		rhs.toReg();
@@ -1399,6 +1399,7 @@ public:
 		
 		if(other)
 		{
+			CodeGen::push(new BranchBlock(afterLabel));
 			CodeGen::push(new LabelBlock(notLabel));
 			StackStore::begin();
 			other->genCode();

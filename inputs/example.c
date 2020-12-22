@@ -17,7 +17,12 @@ int main()
 
     if(c < 5)
     {
-        d = 6;
+        if(b > 4){
+            d = 6;
+        }
+        else{
+            d = 5;
+        }
     }
     else
     {
