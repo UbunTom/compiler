@@ -176,9 +176,10 @@ TextBlock* StringBin::createDirectives(){
 		int index = it->second;
 		std::string stLabel = intToLabel(index);
 		std::string text = it->first;
-		std::string code = stLabel + ":\n.asciz \"" + text + "\"\n.text\n";
+		std::string code = stLabel + ":\n.asciz \"" + text + "\"\n";
 		header += code;
 	}
+	header += ".text\n";
 
 	return new TextBlock(header);
 }
