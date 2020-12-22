@@ -4,7 +4,7 @@
 void RegAlloc::begin()
 {
 	count = 0;
-	for(int i=0; i<8; i++)
+	for(int i=0; i<NREGS; i++)
 	{
 		lastUsed[i] = 0;
 		regs[i] = NULL;
@@ -14,7 +14,7 @@ void RegAlloc::begin()
 int RegAlloc::getEmptyReg()
 {
 	int oldest=0;
-	for(int i=0; i<8; i++)
+	for(int i=0; i<NREGS; i++)
 	{
 		if(regs[i] == NULL) return i;
 
@@ -83,7 +83,7 @@ void RegAlloc::swap(int a, int b){
 
 void RegAlloc::print()
 {
-	for(int i=0; i<8; i++)
+	for(int i=0; i<NREGS; i++)
 	{
 		std::cout << i;
 		if(regs[i]!=NULL){
@@ -146,7 +146,7 @@ void RegAlloc::store(int i){
 
 void RegAlloc::storeAll(int from)
 {
-	for(int i=from; i<8; i++)
+	for(int i=from; i<NREGS; i++)
 	{
 		store(i);
 	}
@@ -154,7 +154,7 @@ void RegAlloc::storeAll(int from)
 
 void RegAlloc::loadAll(int from)
 {
-	for(int i=from; i<8; i++)
+	for(int i=from; i<NREGS; i++)
 	{
 		if(regs[i]!=NULL)regs[i]->use(i);
 	}
@@ -196,8 +196,8 @@ TextBlock* StringBin::createDirectives(){
 	return new TextBlock(header);
 }
 
-std::vector<std::pair<std::array<Registerable*, 8>, std::set<Registerable*> > > RegAlloc::stack;
-std::array<Registerable*, 8> RegAlloc::regs;
-int RegAlloc::lastUsed[8];
+decltype(RegAlloc::stack) RegAlloc::stack;
+decltype(RegAlloc::regs) RegAlloc::regs;
+int RegAlloc::lastUsed[NREGS];
 int RegAlloc::count;
 std::map<std::string, int> StringBin::stringMap;

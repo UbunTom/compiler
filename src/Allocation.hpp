@@ -9,10 +9,12 @@
 #include <set>
 #include <map>
 
+#define NREGS 10
+
 /*
-0 - 3	pass params. Overwritten by subroutines
-4 - 11 	preserved. Store and restore in subroutine
-12	intra-procedure scrtch
+0 - 9 general use
+10 - 11 not used
+12	scrtch
 13	stack pointer
 14	link reg
 15	pc
@@ -20,8 +22,8 @@
 
 /* Function call:
 First 4 words are passed via r0-3
-(Copied to r4-7)
 Anything extra must be passed by stack
+Return value through r0
 */
 
 class StackScope
@@ -97,11 +99,11 @@ class Registerable;
 class Branch;
 class RegAlloc
 {
-	static std::vector<std::pair<std::array<Registerable*, 8>, std::set<Registerable*> > > stack;
+	static std::vector<std::pair<std::array<Registerable*, NREGS>, std::set<Registerable*> > > stack;
 	friend class CodeGen;
 	protected:
-	static std::array<Registerable*, 8> regs;
-	static int lastUsed[8];
+	static std::array<Registerable*, NREGS> regs;
+	static int lastUsed[NREGS];
 	static int count;
 	
 	public:
