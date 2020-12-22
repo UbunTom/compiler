@@ -3,9 +3,7 @@
 #include <tuple>
 #include "CodeGen.hpp"
 
-ScopedVariable::ScopedVariable(Declarator* d, TypeSpec* t):
-	used(false),
-	inReg(false)
+ScopedVariable::ScopedVariable(Declarator* d, TypeSpec* t)
 {
 	type = t;
 	auto ptr_dd = d->getData();
@@ -14,17 +12,11 @@ ScopedVariable::ScopedVariable(Declarator* d, TypeSpec* t):
 	assert(ddb != NULL);
 	
 	identifier = ddb->format();
-
-	//Allocate a stack position
-	location = StackStore::allocate(getSize());
-	
 }
 
 ScopedVariable::ScopedVariable(Declarator* d, TypeSpec* t, int i):
-	used(true),
-	inReg(true)
+	Registerable(i)
 {
-	regLoc = i;
 	
 	type = t;
 	auto ptr_dd = d->getData();
@@ -33,15 +25,25 @@ ScopedVariable::ScopedVariable(Declarator* d, TypeSpec* t, int i):
 	assert(ddb != NULL);
 	
 	identifier = ddb->format();
-
-	//Allocate a stack position
-	location = StackStore::allocate(getSize());
-	
-	
 }
 
-void ScopedVariable::use(int r)
+int Registerable::getStackLocation(){
+	if(!stackAllocated){
+		int allocSize = getSize();
+		stackLocation = StackStore::allocate(allocSize);
+		stackAllocated = true;
+	}
+	return stackLocation;
+}
+
+int Registerable::bind(){
+	RegAlloc::bindReg(this);
+	return regLoc;
+}
+
+void Registerable::use(int r)
 {
+	assert(!unregistered);
 	regLoc = r;
 	
 	if(!used)
@@ -50,19 +52,41 @@ void ScopedVariable::use(int r)
 	}
 	else if(!inReg)
 	{
-		CodeGen::push(new StackOp(false, r, location));
+		CodeGen::push(new StackOp(false, r, getStackLocation()));
 	}
 
 	inReg = true;
 
 }
 
-void ScopedVariable::store()
+void Registerable::store()
 {
 	inReg = false;
-	CodeGen::push(new StackOp(true, getReg(), location));
-
+	CodeGen::push(new StackOp(true, getReg(), getStackLocation()));
 }
+
+void Registerable::unregister()
+{
+	unregistered = true;
+	if(unregistered) return;
+	inReg = false;
+	RegAlloc::freeReg(regLoc);
+}
+
+TemporaryValue::TemporaryValue()
+{
+	RegAlloc::bindReg(this);
+}
+TemporaryValue::TemporaryValue(int reg)
+{
+	RegAlloc::bindReg(this, reg);
+}
+TemporaryValue::~TemporaryValue(){
+	if (inReg){
+		RegAlloc::freeReg(regLoc);
+	}
+}
+
 
 int ScopedVariable::getSize()
 {

@@ -33,7 +33,7 @@ public:
 	
 	StackScope(int framePos){
 		allocAmt = 4;
-		incStack = new SubBlock(13,13,0,true);
+		incStack = new SubBlock(13,13,Imm(0));
 		CodeGen::push(incStack);
 	}
 
@@ -46,8 +46,9 @@ public:
 	}
 
 	~StackScope(){
-		incStack->setImm(allocAmt);
-		CodeGen::push(new AddBlock(13,13,allocAmt,true));
+		Imm immValue(allocAmt);
+		incStack->setOp2(immValue);
+		CodeGen::push(new AddBlock(13,13,immValue));
 	}
 	
 	int getEnd()
@@ -92,14 +93,14 @@ class StackStore
 
 };
 
-class ScopedVariable;
+class Registerable;
 class Branch;
 class RegAlloc
 {
-	static std::vector<std::pair<std::array<ScopedVariable*, 8>, std::set<ScopedVariable*> > > stack;
+	static std::vector<std::pair<std::array<Registerable*, 8>, std::set<Registerable*> > > stack;
 	friend class CodeGen;
 	protected:
-	static std::array<ScopedVariable*, 8> regs;
+	static std::array<Registerable*, 8> regs;
 	static int lastUsed[8];
 	static int count;
 	
@@ -107,16 +108,16 @@ class RegAlloc
 	static void swap(int,int);
 	static void begin();
 	static int getEmptyReg();
-	static void bindReg(ScopedVariable* s, int r);
-	static void bindReg(ScopedVariable* s);
+	static void bindReg(Registerable* s, int r);
+	static void bindReg(Registerable* s);
 	static void freeReg(int i);
 	static int getScratch(){return 12;}
-	
+
 	static void print();
-	
+
 	static void pushState();
 	static void popState(Branch*);
-	
+
 	static void store(int);
 	static void storeAll(int = 0);
 	static void loadAll(int = 0);

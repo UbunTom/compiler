@@ -6,7 +6,11 @@
 #include "Parserbase.h"
 #include "Exception.h"
 #include <map>
+#include <memory>
 
+/*
+Base class for objects that can be accessed within a scope
+*/
 class Scoped
 {
 	protected:
@@ -23,27 +27,78 @@ class TypeSpec;
 class Pointer;
 class Declarator;
 
-class ScopedVariable: public Scoped
+/*
+Base class for objects that can be stored in registers
+*/
+class Registerable
 {
-	TypeSpec* type;
-	Pointer* ptr;
 
 	public:
 	bool used;
 	bool inReg;	//Is currently in a rregister
 	int regLoc;	//Register location
-	int location;	//stack location
 
+	int stackAllocated = false;
+	int stackLocation;	//stack location
+
+	bool unregistered = false;
+
+
+
+	Registerable():
+		used(false),
+		inReg(false)
+	{}
+
+	Registerable(int loc):
+		used(true),
+		inReg(true),
+		regLoc(loc)
+	{}
+
+	void use(int);
+	void store();
+	void unregister();
+
+	int bind();
+	
+	virtual int getSize() = 0;
+	virtual std::string getNameInfo() = 0;
+	
+	int getReg(){return regLoc;}
+	int getStackLocation();
+};
+
+class TemporaryValue: public Registerable{
+
+	public:
+	
+	TemporaryValue();
+	TemporaryValue(int reg);
+	~TemporaryValue();
+	int getSize(){return 4;}
+	std::string getNameInfo(){return "<temp>";}
+
+	template<class... Args>
+	static std::shared_ptr<TemporaryValue> create(Args&&... args){
+		return std::shared_ptr<TemporaryValue>(new TemporaryValue(std::forward<Args>(args)...));
+	}
+};
+
+class ScopedVariable: public Registerable, public Scoped
+{
+	TypeSpec* type;
+	Pointer* ptr;
+
+	public:
 	int getSize();
 	
 	ScopedVariable(Declarator* d, TypeSpec* t);
 	ScopedVariable(Declarator* d, TypeSpec* t, int);
 	std::string typeString();
 
-	void use(int);
-	void store();
-	
-	int getReg(){return regLoc;}
+	std::string getNameInfo(){return name();}
+
 };
 
 class ScopedFunction: public Scoped

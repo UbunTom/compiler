@@ -7,6 +7,8 @@
 #include <cassert>
 #include <exception>
 
+#include "ExpressionResultBase.hpp"
+
 enum Flag
 {
 	EQ, NE, MI, PL, GT, LT, GE, LE, NONE, NEVER
@@ -55,17 +57,106 @@ class RegisterResultBlock: public CodeBlock
 	}
 };
 
+class Imm{
+	public:
+	int value;
+	Imm(int v): value(v)
+	{}
+};
 
+/*
+Class to coerce ExpressionResults into register values
+*/
+class Dest{
+	int value;
+
+	public:
+	Dest(int i){
+		value = i;
+	}
+
+	Dest(ExpressionResult expr){
+		assert(expr->isRegisterable());
+		value = expr->getRegisterable()->bind();
+	}
+
+	operator int(){
+		return value;
+	}
+};
+
+/*
+Class to coerce ExpressionResults into register values
+*/
+class Src{
+	public:
+
+	int value;
+
+	Src(){}
+
+	Src(int i){
+		value = i;
+	}
+
+	Src(RegExpressionResult expr){
+		assert(expr->isRegisterable());
+		value = expr->getRegisterable()->bind();
+	}
+
+	std::string render(){
+		return "r" + std::to_string((long long)value);
+	}
+};
+
+/*
+Class to coerce ExpressionResults into register values.
+Can also take values for immediate instructions.
+*/
+class FlexSrc: public Src{
+	public:
+
+	bool imm = false;
+
+	FlexSrc(int i, bool _imm = false):
+		Src(i), imm(_imm)
+	{}
+
+	FlexSrc(Imm i):
+		Src(i.value), imm(true)
+	{}
+
+	FlexSrc(ExpressionResult expr){
+		if(expr->isRegisterable()){
+			value = expr->getRegisterable()->bind();
+		}
+		else{
+			imm = true;
+			value = expr->getValue();
+		}
+	}
+	FlexSrc(RegExpressionResult expr){
+		value = expr->getRegisterable()->bind();
+	}
+
+	std::string render(){
+		if (!imm) return Src::render();
+		return "#" + std::to_string((long long)value);
+	}
+
+	operator int(){
+		return value;
+	}
+};
 
 class MoveBlock: public RegisterResultBlock
 {
-	int regimm;
-	bool usingImm;
+	FlexSrc src;
 	Flag condCode;
 
 public:
-	MoveBlock(int d, int _0, bool us, Flag co = NONE):
-		RegisterResultBlock(d),regimm(_0), usingImm(us), condCode(co)
+	MoveBlock(Dest d, FlexSrc _src, Flag co = NONE):
+		RegisterResultBlock(d), src(_src), condCode(co)
 	{}
 	
 
@@ -76,9 +167,8 @@ public:
 		out += flagToStr(condCode);
 		
 		out += " r" + std::to_string((long long)regD);
-		if(usingImm) out += ", #";
-		else out += ", r";
-		out += std::to_string((long long)regimm);
+		out += ", ";
+		out += src.render();
 		return out;
 	}
 
@@ -109,23 +199,19 @@ public:
 
 class CMPBlock: public CodeBlock
 {
-	int reg1;
-	int reg2imm;
-	bool usingImm;
+	Src op1;
+	FlexSrc op2;
 
 public:
-	CMPBlock(int d, int _0, bool us):
-		reg1(d),reg2imm(_0), usingImm(us)
+	CMPBlock(Src a, FlexSrc b):
+		op1(a),op2(b)
 	{}
-	
-
 
 	std::string format()
 	{
-		std::string out = std::string("    CMP r") + std::to_string((long long)reg1);
-		if(usingImm) out += ", #";
-		else out += ", r";
-		out += std::to_string((long long)reg2imm);
+		std::string out = std::string("    CMP ") + op1.render();
+		out += ", ";
+		out += op2.render();
 		return out;
 	}
 
@@ -133,121 +219,107 @@ public:
 
 class AndBlock: public RegisterResultBlock
 {
-	int reg1;
-	int reg2imm;
-	bool usingImm;
+	Src op1;
+	FlexSrc op2;
 public:
-	AndBlock(int d, int p1, int p2, bool us):
-		RegisterResultBlock(d), reg1(p1),reg2imm(p2), usingImm(us)
+	AndBlock(Dest d, Src p1, FlexSrc p2):
+		RegisterResultBlock(d), op1(p1), op2(p2)
 	{}
 	std::string format()
 	{
-		std::string out = std::string("    AND r") + std::to_string((long long)reg1);
-		if(usingImm) out += ", #";
-		else out += ", r";
-		out += std::to_string((long long)reg2imm);
+		std::string out = std::string("    AND ") + op1.render();
+		out += ", ";
+		out += op2.render();
 		return out;
 	}
 };
 
 class OrBlock: public RegisterResultBlock
 {
-	int reg1;
-	int reg2imm;
-	bool usingImm;
+	Src op1;
+	FlexSrc op2;
 public:
-	OrBlock(int d, int p1, int p2, bool us):
-		RegisterResultBlock(d), reg1(p1),reg2imm(p2), usingImm(us)
+	OrBlock(int d, Src p1, FlexSrc p2):
+		RegisterResultBlock(d), op1(p1), op2(p2)
 	{}
 	std::string format()
 	{
-		std::string out = std::string("    OR r") + std::to_string((long long)reg1);
-		if(usingImm) out += ", #";
-		else out += ", r";
-		out += std::to_string((long long)reg2imm);
+		std::string out = std::string("    OR ") + op1.render();
+		out += ", ";
+		out += op2.render();
 		return out;
 	}
 };
 
 class AddBlock: public RegisterResultBlock
 {
-	int reg0;
-	int reg1imm;
-	bool usingImm;
+	Src op1;
+	FlexSrc op2;
 
 public:
-	AddBlock(int d, int _0, int _1, bool us):
-		RegisterResultBlock(d), reg0(_0), reg1imm(_1), usingImm(us)
+	AddBlock(Dest d, Src _0, FlexSrc _1):
+		RegisterResultBlock(d), op1(_0), op2(_1)
 	{}
 
-	void setImm(int i){
-		usingImm = true;
-		reg1imm = i;
+	void setOp2(FlexSrc i){
+		op2 = i;
 	}
 
 	std::string format()
 	{
-		if(usingImm && reg1imm == 0 && regD == reg0)
+		if(op2.imm && op2.value == 0 && regD == op1.value)
 		{
 			throw CodeAbortException();
 		}
-		std::string out = std::string("    ADD r") + std::to_string((long long)regD) + ", r" + std::to_string((long long)reg0);
-		if(usingImm) out += ", #";
-		else out += ", r";
-		out += std::to_string((long long)reg1imm);
+		std::string out = std::string("    ADD r") + std::to_string((long long)regD) + ", " + op1.render();
+		out += ", ";
+		out += op2.render();
 		return out;
 	}	
 };
 
 class SubBlock: public RegisterResultBlock
 {
-	int reg0;
-	int reg1imm;
-	bool usingImm;
+	Src op1;
+	FlexSrc op2;
 
 public:
-	SubBlock(int d, int _0, int _1, bool us):
-		RegisterResultBlock(d), reg0(_0), reg1imm(_1), usingImm(us)
-	{		
-	}
+	SubBlock(Dest d, Src _0, FlexSrc _1):
+		RegisterResultBlock(d), op1(_0), op2(_1)
+	{}
 
-	void setImm(int i){
-		usingImm = true;
-		reg1imm = i;
+	void setOp2(FlexSrc i){
+		op2 = i;
 	}
 
 	std::string format()
 	{
-		std::string out = std::string("    SUB r") + std::to_string((long long)regD) + ", r" + std::to_string((long long)reg0);
-		if(usingImm) out += ", #";
-		else out += ", r";
-		out += std::to_string((long long)reg1imm);
+		std::string out = std::string("    SUB r") + std::to_string((long long)regD) + ", " + op1.render();
+		out += ", ";
+		out += op2.render();
 		return out;
 	}	
 };
 
 class RSBBlock: public RegisterResultBlock
 {
-	int reg0;
-	int reg1imm;
-	bool usingImm;
+	Src op1;
+	FlexSrc op2;
 
 public:
-	RSBBlock(int d, int _0, int _1, bool us):
-		RegisterResultBlock(d), reg0(_0), reg1imm(_1), usingImm(us)
+	RSBBlock(Dest d, Src _0, FlexSrc _1):
+		RegisterResultBlock(d), op1(_0), op2(_1)
 	{}
 
-	void setImm(int i){
-		usingImm = true;
-		reg1imm = i;
+	void setOp2(FlexSrc i){
+		op2 = i;
 	}
 
 	std::string format()
 	{
-		std::string out = std::string("    RSB r") + std::to_string((long long)regD) + ", r" + std::to_string((long long)reg0);
-		if(usingImm) out += ", #";
-		else out += ", r";
-		out += std::to_string((long long)reg1imm);
+		std::string out = std::string("    RSB r") + std::to_string((long long)regD) + ", " + op1.render();
+		out += ", ";
+		out += op2.render();
 		return out;
 	}	
 };

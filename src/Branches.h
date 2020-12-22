@@ -10,6 +10,8 @@
 #include "Allocation.hpp"
 #include <algorithm>
 #include "LabelAlloc.hpp"
+#include <memory>
+#include "ExpressionResultTypes.hpp"
 
 
 
@@ -31,17 +33,8 @@ class UnaryOperator: public Branch
 	void genCode(){}
 };
 
-enum ResultLocation
-{
-	REG,
-	CONST,
-	FLAGS,
-	LITERAL,
-	ADDRESS
-};
 
-
-
+/*
 class ExpressionResult
 {
 	public:
@@ -49,6 +42,8 @@ class ExpressionResult
 	int64_t value;
 	Flag flag;
 	std::string str;
+	std::unique_ptr<TemporaryValue> tval;
+	bool inTemp = false;
 	
 	ExpressionResult()
 	{}
@@ -66,11 +61,19 @@ class ExpressionResult
 	{
 		assert(loc == FLAGS);
 	}
+
+	ExpressionResult(ResultLocation b, std::unique_ptr<TemporaryValue>&& _tval):
+		loc(b), tval(std::move(_tval))
+	{
+		std::cout << "Temp expr " << " " << tval->regLoc << std::endl;
+		inTemp = true;
+	}
 	
 	void flagToReg()
 	{
 		assert(loc == FLAGS);
-		int reg = RegAlloc::getScratch();
+		auto tempval = TemporaryValue::create();
+		int res = tempval->getReg();
 		CodeGen::push(new MoveBlock(reg, 0, true));
 		CodeGen::push(new MoveBlock(reg, 1, true, flag));
 		
@@ -97,16 +100,36 @@ class ExpressionResult
 		loc = REG;
 		value = reg;
 	}
+
+	void tvalToReg(){
+		assert((loc == REG) && (inTemp == true));
+
+		std::cout << "Binding tval at " << tval.get() << std::endl;
+		RegAlloc::bindReg(tval.get());
+
+		loc = REG;
+		value = tval->getReg();
+
+		//tval.unregister();
+	}
 	
 	void toReg()
 	{
 		if(loc == FLAGS) flagToReg();
 		else if(loc == CONST) constToReg();
 		else if(loc == LITERAL) literalToReg();
+		else if(loc == REG){
+			if(inTemp)
+				tvalToReg();
+		}
 	}
 };
+*/
 
-
+template <typename T>
+T* fit(ExpressionResult& exp1){
+	auto r = dynamic_cast<T*>(exp1.get());
+}
 bool checkResult(ExpressionResult& exp1, ResultLocation l1);
 bool checkResult(ExpressionResult& exp1, ExpressionResult& exp2, ResultLocation l1, ResultLocation l2);
 void orderResult(ExpressionResult& exp1, ExpressionResult& exp2, ResultLocation l1);
@@ -155,24 +178,24 @@ public:
 	ExpressionResult execute()
 	{
 		if(mode==0) return conditionalexp->execute();
-		ExpressionResult rhs = assignmentexp->execute();
-		// Perform lhs execution second
 		ExpressionResult lhs = unaryexp->execute();
+		ExpressionResult rhs = assignmentexp->execute();
 
 		if (!checkResult(lhs, REG)) throw SyntaxError("Left hand size of assignment is immutable");
 		
-		if(rhs.loc == LITERAL) rhs.literalToReg();
+		if(rhs->loc == LITERAL) rhs = rhs->toRegisterable();
 
 		if(checkResult(rhs, REG)){
-			CodeGen::push(new MoveBlock(lhs.value, rhs.value, false));
+			CodeGen::push(new MoveBlock(lhs, rhs));
 		}
 		else if(checkResult(rhs, CONST)){
-			CodeGen::push(new MoveBlock(lhs.value, rhs.value, true));
+			CodeGen::push(new MoveBlock(lhs, rhs));
 		}
 		else
 		{
-			CodeGen::push(new MoveBlock(lhs.value, 0, true));
-			CodeGen::push(new MoveBlock(lhs.value, 1, true, rhs.flag));
+			FlagsResult* flagResult = fit<FlagsResult>(rhs);
+			CodeGen::push(new MoveBlock(lhs, Imm(0)));
+			CodeGen::push(new MoveBlock(lhs, Imm(1), flagResult->getFlag()));
 		}
 
 		return lhs;
@@ -197,7 +220,7 @@ public:
 		ScopedVariable* s = dynamic_cast<ScopedVariable*>(getScope(id));
 		assert(s != NULL);
 		RegAlloc::bindReg(s);
-		return ExpressionResult(REG, s->getReg());
+		return std::make_shared<VarResult>(s);
 	}
 };
 
@@ -226,7 +249,7 @@ public:
 
 	ExpressionResult execute()
 	{
-		return ExpressionResult(CONST, datai);
+		return std::make_shared<ConstResult>(datai);
 	}
 };
 
@@ -242,7 +265,7 @@ public:
 
 	ExpressionResult execute()
 	{
-		return ExpressionResult(LITERAL, StringBin::newLiteral(id));
+		return std::make_shared<LiteralResult>(StringBin::newLiteral(id));
 	}
 };
 
@@ -305,9 +328,9 @@ public:
 	
 	int executeEval(int i){
 		ExpressionResult eval = first->execute();
-		eval.toReg();
+		eval = eval->toRegisterable();
 		
-		CodeGen::push(new StackPushPop({eval.value}, true));
+		CodeGen::push(new StackPushPop({eval->getRegisterable()->bind()}, true));
 		
 		int ret = i;
 		if(next){
@@ -353,7 +376,7 @@ public:
 		RegAlloc::storeAll();
 		CodeGen::push(new BBlock(iden->format(), true));
 		
-		return ExpressionResult(REG, 0);
+		return std::make_shared<TempResult>(TemporaryValue::create(0));
 	}
 };
 
@@ -522,25 +545,27 @@ public:
 		ExpressionResult lhs = exclusiveorexp->execute();
 		ExpressionResult rhs = inclusiveorexp->execute();
 		
-		if(checkResult(lhs, FLAGS))lhs.flagToReg();
-		if(checkResult(rhs, FLAGS))rhs.flagToReg();
+		if(checkResult(lhs, FLAGS))lhs = lhs->toRegisterable();
+		if(checkResult(rhs, FLAGS))rhs = rhs->toRegisterable();
 		
 		if(checkResult(lhs, rhs, REG, REG))
 		{
-			int res = RegAlloc::getScratch();
-			CodeGen::push(new OrBlock(res, lhs.value, rhs.value, false));
-			return ExpressionResult(REG, res);
+			auto tempval = TemporaryValue::create();
+			int res = tempval->getReg();
+			CodeGen::push(new OrBlock(res, lhs->toRegisterable(), rhs));
+			return std::make_shared<TempResult>(tempval);
 		}
 		else if(checkResult(lhs, rhs, CONST, REG))
 		{
-			int res = RegAlloc::getScratch();
+			auto tempval = TemporaryValue::create();
+			int res = tempval->getReg();
 			orderResult(lhs, rhs, REG);
-			CodeGen::push(new OrBlock(res, lhs.value, rhs.value, true));
-			return ExpressionResult(REG, res);
+			CodeGen::push(new OrBlock(res, lhs->toRegisterable(), rhs));
+			return std::make_shared<TempResult>(tempval);
 		}
 		else
 		{
-			return ExpressionResult(CONST, lhs.value && rhs.value);
+			return std::make_shared<ConstResult>(lhs->getValue() && rhs->getValue());
 		}
 	}
 };
@@ -607,25 +632,27 @@ public:
 		ExpressionResult lhs = equalityexp->execute();
 		ExpressionResult rhs = andexp->execute();
 		
-		if(checkResult(lhs, FLAGS))lhs.flagToReg();
-		if(checkResult(rhs, FLAGS))rhs.flagToReg();
+		if(checkResult(lhs, FLAGS))lhs = lhs->toRegisterable();
+		if(checkResult(rhs, FLAGS))rhs = rhs->toRegisterable();
 		
 		if(checkResult(lhs, rhs, REG, REG))
 		{
-			int res = RegAlloc::getScratch();
-			CodeGen::push(new AndBlock(res, lhs.value, rhs.value, false));
-			return ExpressionResult(REG, res);
+			auto tempval = TemporaryValue::create();
+			int res = tempval->getReg();
+			CodeGen::push(new AndBlock(res, lhs->toRegisterable(), rhs));
+			return std::make_shared<TempResult>(tempval);
 		}
 		else if(checkResult(lhs, rhs, CONST, REG))
 		{
-			int res = RegAlloc::getScratch();
+			auto tempval = TemporaryValue::create();
+			int res = tempval->getReg();
 			orderResult(lhs, rhs, REG);
-			CodeGen::push(new AndBlock(res, lhs.value, rhs.value, true));
-			return ExpressionResult(REG, res);
+			CodeGen::push(new AndBlock(res, lhs->toRegisterable(), rhs));
+			return std::make_shared<TempResult>(tempval);
 		}
 		else
 		{
-			return ExpressionResult(CONST, lhs.value && rhs.value);
+			return std::make_shared<ConstResult>(lhs->getValue() && rhs->getValue());
 		}
 		
 	}
@@ -671,23 +698,23 @@ public:
 		ExpressionResult lhs = relationalexp->execute();
 		ExpressionResult rhs = equalityexp->execute();
 		
-		if(checkResult(lhs, FLAGS))lhs.flagToReg();
-		if(checkResult(rhs, FLAGS))rhs.flagToReg();
+		if(checkResult(lhs, FLAGS))lhs = lhs->toRegisterable();
+		if(checkResult(rhs, FLAGS))rhs = rhs->toRegisterable();
 		
 		if(checkResult(lhs, rhs, REG, REG))
 		{
-			CodeGen::push(new CMPBlock(lhs.value, rhs.value, false));
-			return ExpressionResult(FLAGS, (op == ParserBase::EQ_OP) ? EQ : NE);
+			CodeGen::push(new CMPBlock(lhs->toRegisterable(), rhs));
+			return std::make_shared<FlagsResult>((op == ParserBase::EQ_OP) ? EQ : NE);
 		}
 		else if(checkResult(lhs, rhs, CONST, REG))
 		{
 			orderResult(lhs, rhs, REG);
-			CodeGen::push(new CMPBlock(lhs.value, rhs.value, true));
-			return ExpressionResult(FLAGS, (op == ParserBase::EQ_OP) ? EQ : NE);
+			CodeGen::push(new CMPBlock(lhs->toRegisterable(), rhs));
+			return std::make_shared<FlagsResult>((op == ParserBase::EQ_OP) ? EQ : NE);
 		}
 		else
 		{
-			return ExpressionResult(CONST, lhs.value == rhs.value);
+			return std::make_shared<ConstResult>(lhs->getValue() == rhs->getValue());
 		}
 		
 	}
@@ -739,10 +766,10 @@ public:
 		ExpressionResult lhs = relationalexp->execute();
 		ExpressionResult rhs = shiftexp->execute();
 		
-		lhs.toReg();
-		rhs.toReg();
+		lhs = lhs->toRegisterable();
+		rhs = rhs->toRegisterable();
 		
-		CodeGen::push(new CMPBlock(lhs.value, rhs.value, false));
+		CodeGen::push(new CMPBlock(lhs->toRegisterable(), rhs));
 		Flag fl;
 		switch(op){
 			case '<': fl = LT; break;
@@ -751,7 +778,7 @@ public:
 			case ParserBase::GE_OP: fl = GE; break;
 		}
 			
-		return ExpressionResult(FLAGS, fl);
+		return std::make_shared<FlagsResult>(fl);
 		
 	}
 };
@@ -839,37 +866,41 @@ public:
 		ExpressionResult lhs = multexp->execute();
 		ExpressionResult rhs = addexp->execute();
 		
-		if(checkResult(lhs, FLAGS))lhs.flagToReg();
-		if(checkResult(rhs, FLAGS))rhs.flagToReg();
+		if(checkResult(lhs, FLAGS))lhs = lhs->toRegisterable();
+		if(checkResult(rhs, FLAGS))rhs = rhs->toRegisterable();
 		
 		if(checkResult(lhs, rhs, REG, REG))
 		{
-			int res = RegAlloc::getScratch();
-			if(op == '+') CodeGen::push(new AddBlock(res, lhs.value, rhs.value, false));
-			else CodeGen::push(new SubBlock(res, lhs.value, rhs.value, false));
-			return ExpressionResult(REG, res);
+			auto tempval = TemporaryValue::create();
+			int res = tempval->getReg();
+
+			if(op == '+') CodeGen::push(new AddBlock(res, lhs->toRegisterable(), rhs));
+			else CodeGen::push(new SubBlock(res, lhs->toRegisterable(), rhs));
+			return std::make_shared<TempResult>(tempval);
 		}
 		else if(checkResult(lhs, rhs, CONST, CONST))
 		{
-			if(op == '+') return ExpressionResult(CONST, lhs.value + rhs.value);
-			else return ExpressionResult(CONST, lhs.value - rhs.value);
+			if(op == '+') return std::make_shared<ConstResult>(lhs->getValue() + rhs->getValue());
+			else return std::make_shared<ConstResult>(lhs->getValue() - rhs->getValue());
 		}
 		else if(checkResult(lhs, rhs, REG, CONST))
 		{
-			int res = RegAlloc::getScratch();
+			auto tempval = TemporaryValue::create();
+			int res = tempval->getReg();
 			if(op == '+'){
 				orderResult(lhs, rhs, REG);
-				CodeGen::push(new AddBlock(res, lhs.value, rhs.value, true));
-				return ExpressionResult(REG, res);
+				CodeGen::push(new AddBlock(res, lhs->toRegisterable(), rhs));
+				return std::make_shared<TempResult>(tempval);
 			}
 			
-			if(lhs.loc == REG){
-				CodeGen::push(new SubBlock(res, lhs.value, -rhs.value, true));
-				return ExpressionResult(REG, res);
+			if(lhs->loc == REG){
+				CodeGen::push(new SubBlock(res, lhs->toRegisterable(), Imm(-rhs->getValue())));
+				return std::make_shared<TempResult>(tempval);
 			}
 			
-			CodeGen::push(new RSBBlock(res, lhs.value, rhs.value, true));
-			return ExpressionResult(REG, res);
+			lhs = lhs->toRegisterable();
+			CodeGen::push(new RSBBlock(res, lhs->toRegisterable(), rhs));
+			return std::make_shared<TempResult>(tempval);
 		}
 		
 		assert(false);
@@ -981,9 +1012,8 @@ public:
 	void genCode()
 	{
 		if(exp){
-			ExpressionResult expr = exp->execute();
-			expr.toReg();
-			CodeGen::push(new MoveBlock(0, expr.value, false));
+			ExpressionResult expr = exp->execute()->toRegisterable();
+			CodeGen::push(new MoveBlock(0, expr));
 		}
 		CodeGen::push(new BBlock("." + LoopLabelJump::getReturn(), false));
 	}
@@ -1376,12 +1406,12 @@ public:
 		ExpressionResult rx = cmp->execute();
 		if(checkResult(rx, REG))
 		{
-			CodeGen::push(new CMPBlock(rx.value, 0, true));
+			CodeGen::push(new CMPBlock(rx->toRegisterable(), FlexSrc(0, true)));
 			CodeGen::push(new BranchBlock(notLabel, NE));
 		}
 		else if(checkResult(rx, CONST))
 		{
-			if(rx.value != 0)
+			if(rx->getValue() != 0)
 				then->genCode();
 			else if(other)
 				other->genCode();
@@ -1389,7 +1419,8 @@ public:
 			return;
 		}
 		else{
-			CodeGen::push(new BranchBlock(notLabel, flagInvert(rx.flag)));
+			FlagsResult* flagResult = fit<FlagsResult>(rx);
+			CodeGen::push(new BranchBlock(notLabel, flagResult->getFlag()));
 			
 		}
 		
@@ -1620,9 +1651,8 @@ public:
 		if(expstmt->empty == true)
 			CodeGen::push(new BranchBlock(loopLabel));
 		else{
-			ExpressionResult expr = expstmt->exp->execute();
-			expr.toReg();
-			CodeGen::push(new CMPBlock(expr.value, 0, true));
+			auto expr = expstmt->exp->execute()->toRegisterable();
+			CodeGen::push(new CMPBlock(expr, Imm(0)));
 			CodeGen::push(new BranchBlock(loopLabel, NE));
 		}
 		
@@ -1680,8 +1710,7 @@ public:
 		CodeGen::push(new LabelBlock(compLabel));
 		
 		ExpressionResult expr = exp->execute();
-		expr.toReg();
-		CodeGen::push(new CMPBlock(expr.value, 0, true));
+		CodeGen::push(new CMPBlock(expr->toRegisterable(), Imm(0)));
 		CodeGen::push(new BranchBlock(loopLabel, NE));
 		
 		CodeGen::push(new LabelBlock(afterLabel));

@@ -31,8 +31,7 @@ int RegAlloc::getEmptyReg()
 	return oldest;
 }
 
-
-void RegAlloc::bindReg(ScopedVariable* s)
+void RegAlloc::bindReg(Registerable* s)
 {
 	for(size_t i=0; i<stack.size(); i++)
 	{
@@ -45,7 +44,7 @@ void RegAlloc::bindReg(ScopedVariable* s)
 	regs[r] = s;
 }
 
-void RegAlloc::bindReg(ScopedVariable* s, int r)
+void RegAlloc::bindReg(Registerable* s, int r)
 {
 	for(size_t i=0; i<stack.size(); i++)
 	{
@@ -58,18 +57,22 @@ void RegAlloc::bindReg(ScopedVariable* s, int r)
 		regs[r]->store();
 		
 	if(s->inReg)
-		CodeGen::push(new MoveBlock(r, s->regLoc, false));
+		CodeGen::push(new MoveBlock(r, s->regLoc));
 	else
 		s->use(r);
 	
 	regs[r] = s;
 }
 
+// Free up a register
+void RegAlloc::freeReg(int r){
+	regs[r] = NULL;
+}
 
 void RegAlloc::swap(int a, int b){
-	ScopedVariable* one = regs[a];
+	Registerable* one = regs[a];
 	if(one)one->use(b);
-	ScopedVariable* two = regs[b];
+	Registerable* two = regs[b];
 	if(two)two->use(a);
 	
 	regs[a] = two;
@@ -83,12 +86,14 @@ void RegAlloc::print()
 	for(int i=0; i<8; i++)
 	{
 		std::cout << i;
-		if(regs[i]!=NULL)
-			std::cout << regs[i]->name() << " " << regs[i]->regLoc;
+		if(regs[i]!=NULL){
+			std::cout << regs[i]->getNameInfo() << " " << regs[i]->regLoc;
+		}
 		std::cout << std::endl;
 	}
 }
 
+/*
 void RegAlloc::pushState()
 {
 	stack.push_back(std::make_pair(regs, std::set<ScopedVariable*>()));
@@ -131,7 +136,7 @@ void RegAlloc::popState(Branch* loop)
 		
 	}
 }
-
+*/
 void RegAlloc::store(int i){
 	if(regs[i]!=NULL){
 		regs[i]->store();
@@ -191,8 +196,8 @@ TextBlock* StringBin::createDirectives(){
 	return new TextBlock(header);
 }
 
-std::vector<std::pair<std::array<ScopedVariable*, 8>, std::set<ScopedVariable*> > > RegAlloc::stack;
-std::array<ScopedVariable*, 8> RegAlloc::regs;
+std::vector<std::pair<std::array<Registerable*, 8>, std::set<Registerable*> > > RegAlloc::stack;
+std::array<Registerable*, 8> RegAlloc::regs;
 int RegAlloc::lastUsed[8];
 int RegAlloc::count;
 std::map<std::string, int> StringBin::stringMap;

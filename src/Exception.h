@@ -42,4 +42,13 @@ class SyntaxError: public std::runtime_error
 
 };
 
+class CompilerError: public std::runtime_error
+{
+	public:
+	CompilerError(std::string s):
+		std::runtime_error("Compiler error: " + s)
+	{}
+
+};
+
 #endif
