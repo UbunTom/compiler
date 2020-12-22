@@ -60,7 +60,7 @@ void ScopedVariable::use(int r)
 void ScopedVariable::store()
 {
 	inReg = false;
-	CodeGen::push(new StackOp(true, regLoc, location));
+	CodeGen::push(new StackOp(true, getReg(), location));
 
 }
 

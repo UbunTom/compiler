@@ -43,8 +43,7 @@ class ScopedVariable: public Scoped
 	void use(int);
 	void store();
 	
-	int getArrayReg(){return regLoc;}
-	int getARMReg(){return regLoc+2;}
+	int getReg(){return regLoc;}
 };
 
 class ScopedFunction: public Scoped

@@ -196,7 +196,7 @@ public:
 		ScopedVariable* s = dynamic_cast<ScopedVariable*>(getScope(id));
 		assert(s != NULL);
 		RegAlloc::bindReg(s);
-		return ExpressionResult(REG, s->getARMReg());
+		return ExpressionResult(REG, s->getReg());
 	}
 };
 
