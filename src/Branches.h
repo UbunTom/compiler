@@ -1030,6 +1030,7 @@ public:
 	
 	void genCode()
 	{
+		RegAlloc::storeAll();
 		if (contOrRet==0)CodeGen::push(new BBlock(LoopLabelJump::getContinue(), false));
 		else CodeGen::push(new BBlock(LoopLabelJump::getBreak(), false));
 	}
@@ -1629,7 +1630,6 @@ public:
 	
 	void genCode()
 	{
-		std::string loopLabel = LabelAlloc::allocate();
 		std::string compLabel = LabelAlloc::allocate();
 		std::string afterLabel = LabelAlloc::allocate();
 		
@@ -1639,33 +1639,30 @@ public:
 		
 		if(decl)decl->genCode();
 		else declstmt->genCode();
-		
-		CodeGen::push(new BBlock(compLabel, false));
-		
-		//RegAlloc::pushState();
-		CodeGen::push(new LabelBlock(loopLabel));
-		
-		exp->execute();
-		
-		stmt->genCode();
-		
-		
-		//RegAlloc::popState(this);
-		
+
+		RegAlloc::storeAll();
+
 		CodeGen::push(new LabelBlock(compLabel));
-		
-		if(expstmt->empty == true)
-			CodeGen::push(new BranchBlock(loopLabel));
-		else{
+
+		if(!expstmt->empty)
+		{
 			auto expr = expstmt->exp->execute()->toRegisterable();
 			CodeGen::push(new CMPBlock(expr, Imm(0)));
-			CodeGen::push(new BranchBlock(loopLabel, NE));
+			CodeGen::push(new BranchBlock(afterLabel, EQ));
+
+		RegAlloc::storeAll();
 		}
-		
+
+		exp->execute();
+
+		stmt->genCode();
+
+		StackStore::end();
+		RegAlloc::storeAll();
+		CodeGen::push(new BBlock(compLabel, false));
+
 		CodeGen::push(new LabelBlock(afterLabel));
 	
-		StackStore::end();
-		
 		LoopLabelJump::pop();
 	}
 };
@@ -1696,34 +1693,38 @@ public:
 	
 	void genCode()
 	{
-		std::string loopLabel = LabelAlloc::allocate();
 		std::string compLabel = LabelAlloc::allocate();
 		std::string afterLabel = LabelAlloc::allocate();;
-		
+
+
+		RegAlloc::storeAll();
+
+		// Comparison expression
+		CodeGen::push(new LabelBlock(compLabel));
+
+		ExpressionResult expr = exp->execute();
+		CodeGen::push(new CMPBlock(expr->toRegisterable(), Imm(0)));
+
+		RegAlloc::storeAll();
+		CodeGen::push(new BranchBlock(afterLabel, EQ));
+
+		// Body
 		LoopLabelJump::push(afterLabel, compLabel);
 		
 		StackStore::begin();
 		
-		CodeGen::push(new BBlock(compLabel, false));
-		
-		//RegAlloc::pushState();
-		CodeGen::push(new LabelBlock(loopLabel));
-		
 		stmt->genCode();
-		
-		//RegAlloc::popState(this);
-		
-		CodeGen::push(new LabelBlock(compLabel));
-		
-		ExpressionResult expr = exp->execute();
-		CodeGen::push(new CMPBlock(expr->toRegisterable(), Imm(0)));
-		CodeGen::push(new BranchBlock(loopLabel, NE));
-		
-		CodeGen::push(new LabelBlock(afterLabel));
-	
+
 		StackStore::end();
-		
+
+		RegAlloc::storeAll();
+		CodeGen::push(new BBlock(compLabel, false));
+
 		LoopLabelJump::pop();
+
+		// End
+		CodeGen::push(new LabelBlock(afterLabel));
+		
 	}
 };
 
