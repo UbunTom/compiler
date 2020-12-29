@@ -94,6 +94,25 @@ void RegAlloc::print()
 }
 
 /*
+Restore the internal state of the registers to the provided snapshot.
+This function will not generate code to store/load stack state.
+*/
+void RegAlloc::restoreSnapshot(std::array<Registerable*, NREGS> snap){
+	for(int i=0; i<NREGS; i++){
+		if(regs[i] != nullptr){
+			regs[i]->restore();
+			regs[i] = nullptr;
+		}
+	}
+	for(int i=0; i<NREGS; i++){
+		if(snap[i] != nullptr){
+			snap[i]->restore(i);
+			regs[i] = snap[i];
+		}
+	}
+}
+
+/*
 void RegAlloc::pushState()
 {
 	stack.push_back(std::make_pair(regs, std::set<ScopedVariable*>()));

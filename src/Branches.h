@@ -1423,18 +1423,24 @@ public:
 			CodeGen::push(new BranchBlock(notLabel, flagResult->getFlag()));
 			
 		}
-		
+
+		auto regSnapshot = RegAlloc::createSnapshot();
+
 		StackStore::begin();
 		then->genCode();
 		StackStore::end();
+		RegAlloc::storeAll();
 		
 		if(other)
 		{
+			RegAlloc::restoreSnapshot(regSnapshot);
+
 			CodeGen::push(new BranchBlock(afterLabel));
 			CodeGen::push(new LabelBlock(notLabel));
 			StackStore::begin();
 			other->genCode();
 			StackStore::end();
+			RegAlloc::storeAll();
 		}
 		
 		CodeGen::push(new LabelBlock(afterLabel));		

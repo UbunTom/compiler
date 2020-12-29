@@ -41,6 +41,14 @@ int Registerable::bind(){
 	return regLoc;
 }
 
+void Registerable::restore(int r){
+	regLoc = r;
+	inReg = true;
+}
+void Registerable::restore(){
+	inReg = false;
+}
+
 void Registerable::use(int r)
 {
 	assert(!unregistered);

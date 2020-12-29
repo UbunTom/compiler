@@ -117,6 +117,10 @@ class RegAlloc
 
 	static void print();
 
+	static std::array<Registerable*, NREGS> createSnapshot(){
+		return regs;
+	}
+	static void restoreSnapshot(std::array<Registerable*, NREGS>);
 	static void pushState();
 	static void popState(Branch*);
 

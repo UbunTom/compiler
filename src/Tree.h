@@ -56,6 +56,8 @@ class Registerable
 		regLoc(loc)
 	{}
 
+	void restore();
+	void restore(int);
 	void use(int);
 	void store();
 	void unregister();
