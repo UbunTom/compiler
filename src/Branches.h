@@ -1408,7 +1408,7 @@ public:
 		if(checkResult(rx, REG))
 		{
 			CodeGen::push(new CMPBlock(rx->toRegisterable(), FlexSrc(0, true)));
-			CodeGen::push(new BranchBlock(notLabel, NE));
+			CodeGen::push(new BranchBlock(notLabel, EQ));
 		}
 		else if(checkResult(rx, CONST))
 		{
@@ -1421,7 +1421,7 @@ public:
 		}
 		else{
 			FlagsResult* flagResult = fit<FlagsResult>(rx);
-			CodeGen::push(new BranchBlock(notLabel, flagResult->getFlag()));
+			CodeGen::push(new BranchBlock(notLabel, flagInvert(flagResult->getFlag())));
 			
 		}
 
@@ -1430,10 +1430,10 @@ public:
 		StackStore::begin();
 		then->genCode();
 		StackStore::end();
-		RegAlloc::storeAll();
 		
 		if(other)
 		{
+			RegAlloc::storeAll();
 			RegAlloc::restoreSnapshot(regSnapshot);
 
 			CodeGen::push(new BranchBlock(afterLabel));
